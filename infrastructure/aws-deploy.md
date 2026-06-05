@@ -1,5 +1,65 @@
 # AWS Deployment Guide
 
+## Provisioned Resources (2026-06-05)
+
+> All infrastructure below was created on 2026-06-05. Use these IDs directly — no need to re-run the provisioning steps.
+
+**Account:** `648548511587` · **Region:** `us-east-1`
+
+| Resource | Name / ID | AWS Console |
+|----------|-----------|-------------|
+| IAM role | `ecsTaskExecutionRole` | [IAM Roles](https://console.aws.amazon.com/iam/home#/roles/ecsTaskExecutionRole) |
+| ECS security group | `sg-0d2d51497d37f9c33` | [EC2 SGs](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#SecurityGroups:) |
+| RDS security group | `sg-00d6a98ed349a1079` | [EC2 SGs](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#SecurityGroups:) |
+| ECR repository | `investment-tracker-api` | [ECR](https://console.aws.amazon.com/ecr/repositories/private/648548511587/investment-tracker-api?region=us-east-1) |
+| CloudWatch log group | `/ecs/investment-tracker` | [CloudWatch](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/%2Fecs%2Finvestment-tracker) |
+| ECS cluster | `investment-tracker-cluster` | [ECS](https://console.aws.amazon.com/ecs/v2/clusters/investment-tracker-cluster?region=us-east-1) |
+| ECS service | `investment-tracker-api` | [ECS Service](https://console.aws.amazon.com/ecs/v2/clusters/investment-tracker-cluster/services/investment-tracker-api?region=us-east-1) |
+| ECS task definition | `investment-tracker-api:1` | [Task Definitions](https://console.aws.amazon.com/ecs/v2/task-definitions/investment-tracker-api?region=us-east-1) |
+| RDS instance | `investment-tracker-db` | [RDS](https://console.aws.amazon.com/rds/home?region=us-east-1#database:id=investment-tracker-db) |
+| Secrets Manager | `investment-tracker/db-connection-KMHXlO` | [Secrets Manager](https://console.aws.amazon.com/secretsmanager/home?region=us-east-1#!/listSecrets) |
+
+**RDS endpoint:** `investment-tracker-db.cc9isgm6qkub.us-east-1.rds.amazonaws.com`
+
+**ECR image URI:** `648548511587.dkr.ecr.us-east-1.amazonaws.com/investment-tracker-api`
+
+### GitHub Secrets — ready to copy
+
+Go to: https://github.com/RonenBarak/RonenTry/settings/secrets/actions
+
+| Secret | Value |
+|--------|-------|
+| `AWS_ACCESS_KEY_ID` | *(Ronen IAM user access key — from IAM Console → Users → Ronen → Security credentials)* |
+| `AWS_SECRET_ACCESS_KEY` | *(Ronen IAM user secret key)* |
+| `AWS_REGION` | `us-east-1` |
+| `ECR_REPOSITORY` | `investment-tracker-api` |
+| `ECS_CLUSTER` | `investment-tracker-cluster` |
+| `ECS_SERVICE` | `investment-tracker-api` |
+
+### Current deployment status
+
+| Step | Status |
+|------|--------|
+| AWS infrastructure | ✅ Provisioned |
+| GitHub Secrets added | ❌ Pending |
+| Code committed & pushed | ❌ Pending |
+| Docker image in ECR | ❌ Pending (built by GitHub Actions on first push) |
+| ECS task healthy | ❌ Pending (starts after image is pushed) |
+| DB migration run | ❌ Pending (run once ECS task is healthy) |
+| Frontend on S3/CloudFront | ❌ Pending (optional — can test locally first) |
+
+### Cost note
+
+Estimated ~$1.10 for a 48-hour POC (RDS `db.t3.micro` at $0.016/hr is the main cost). Delete the RDS instance after testing to stop charges: `aws rds delete-db-instance --db-instance-identifier investment-tracker-db --skip-final-snapshot --region us-east-1`
+
+### Known issues / limitations
+
+- **ECS task public IP changes** on every task replacement (redeployment). After each GitHub Actions deploy, re-check the IP and update `frontend/config.js` before using the form. Add an ALB for a stable DNS endpoint.
+- **No S3/CloudFront yet** — frontend runs locally (`open frontend/index.html`) until S3 is set up (Step 9 below).
+- **`Cors__AllowedOrigin` is set to `http://localhost`** in the current task definition. Update it after CloudFront is configured.
+
+---
+
 ## Architecture Overview
 
 ```

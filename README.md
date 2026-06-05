@@ -92,3 +92,16 @@ dotnet ef database update
 See [infrastructure/aws-deploy.md](infrastructure/aws-deploy.md) for step-by-step instructions to deploy to AWS ECS Fargate with RDS SQL Server and CloudFront-hosted frontend.
 
 The CI/CD pipeline (`.github/workflows/deploy.yml`) triggers automatically on push to `main`.
+
+### Deployment Status (as of 2026-06-05)
+
+| Layer | Status | Notes |
+|-------|--------|-------|
+| AWS Infrastructure | ✅ Provisioned | All resources created in `us-east-1` |
+| Code committed | ❌ Pending | Run `git add . && git commit && git push` |
+| Docker image in ECR | ❌ Pending | Built automatically by GitHub Actions on first push |
+| ECS task running | ❌ Pending | Starts after Docker image is pushed |
+| DB migration | ❌ Pending | Run once ECS task is healthy |
+| Frontend on S3/CloudFront | ❌ Pending | Can open `frontend/index.html` locally in the meantime |
+
+**Next action:** Add 6 GitHub Secrets (see `infrastructure/aws-deploy.md` → Step 11), then `git push`.

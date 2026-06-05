@@ -76,3 +76,25 @@ NuGet packages: `BCrypt.Net-Next` (password hashing), `Microsoft.EntityFramework
 ## API
 
 Single endpoint: `POST /api/offices/register` — request/response shapes in `spec.md`.
+
+## AWS Environment (us-east-1, account 648548511587)
+
+All infrastructure was provisioned on 2026-06-05. Use these IDs when working with AWS CLI or console.
+
+| Resource | Name / ID |
+|----------|-----------|
+| IAM role (ECS tasks) | `ecsTaskExecutionRole` |
+| ECS security group | `sg-0d2d51497d37f9c33` (inbound 8080) |
+| RDS security group | `sg-00d6a98ed349a1079` (inbound 1433 from ECS SG only) |
+| ECR repository | `648548511587.dkr.ecr.us-east-1.amazonaws.com/investment-tracker-api` |
+| CloudWatch log group | `/ecs/investment-tracker` |
+| ECS cluster | `investment-tracker-cluster` |
+| ECS service | `investment-tracker-api` |
+| ECS task definition | `investment-tracker-api:1` |
+| RDS endpoint | `investment-tracker-db.cc9isgm6qkub.us-east-1.rds.amazonaws.com` |
+| Secrets Manager | `investment-tracker/db-connection-KMHXlO` |
+
+**Current state:** Code is written and reviewed but **not yet committed**. The ECS service is running with `desired-count=1` but will fail to start until a Docker image is pushed to ECR by GitHub Actions.
+
+**To deploy:** Add GitHub Secrets → `git add . && git commit && git push` → GitHub Actions handles the rest.  
+See `infrastructure/aws-deploy.md` Step 11 for the GitHub Secrets values.
