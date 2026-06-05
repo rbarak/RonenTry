@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>הרשמה</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="card">
+        <h1>הרשמת משרד רואי חשבון</h1>
+        <div id="message" class="message hidden" role="alert"></div>
+        <form id="registration-form" novalidate>
+            <div class="field">
+                <label for="officeName">🏢 שם משרד</label>
+                <input type="text" id="officeName" name="officeName" autocomplete="organization" required>
+                <div class="error hidden" id="error-officeName">שדה זה הינו חובה</div>
+            </div>
+            <div class="field">
+                <label for="managerName">👤 שם מנהל</label>
+                <input type="text" id="managerName" name="managerName" autocomplete="name" required>
+                <div class="error hidden" id="error-managerName">שדה זה הינו חובה</div>
+            </div>
+            <div class="field">
+                <label for="email">✉️ אימייל</label>
+                <input type="email" id="email" name="email" autocomplete="email" required>
+                <div class="error hidden" id="error-email">כתובת האימייל אינה תקינה</div>
+            </div>
+            <div class="field">
+                <label for="phone">📞 טלפון</label>
+                <input type="text" id="phone" name="phone" autocomplete="tel" required>
+                <div class="error hidden" id="error-phone">מספר הטלפון חייב להכיל בין 10 ל-15 ספרות</div>
+            </div>
+            <div class="field">
+                <label for="userName">👨‍💻 יוזר</label>
+                <input type="text" id="userName" name="userName" autocomplete="username" required>
+                <div class="error hidden" id="error-userName">שדה זה הינו חובה</div>
+            </div>
+            <div class="field">
+                <label for="password">🔒 סיסמא</label>
+                <input type="password" id="password" name="password" autocomplete="new-password" required>
+                <div class="error hidden" id="error-password">הסיסמא חייבת להכיל לפחות: אות גדולה אחת, ספרה אחת, תו מיוחד אחד, 8 תווים לפחות</div>
+            </div>
+            <button type="submit" id="submit-btn">
+                <span id="spinner" class="spinner hidden" aria-hidden="true"></span>
+                הרשם
+            </button>
+        </form>
+    </div>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
