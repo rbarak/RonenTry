@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using InvestmentTracker.Api.Core.DTOs;
+using Xunit;
 
 namespace InvestmentTracker.Api.Tests;
 

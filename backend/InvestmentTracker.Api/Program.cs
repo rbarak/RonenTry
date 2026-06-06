@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using InvestmentTracker.Api.Core.Interfaces;
 using InvestmentTracker.Api.Infrastructure.Data;
 using InvestmentTracker.Api.Infrastructure.Repositories;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);

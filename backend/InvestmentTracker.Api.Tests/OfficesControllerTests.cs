@@ -3,6 +3,7 @@ using InvestmentTracker.Api.Core.DTOs;
 using InvestmentTracker.Api.Core.Entities;
 using InvestmentTracker.Api.Core.Interfaces;
 using Microsoft.AspNetCore.Http;
+using Xunit;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
