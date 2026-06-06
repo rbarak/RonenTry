@@ -31,6 +31,7 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddControllers();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -44,6 +45,7 @@ app.Use(async (context, next) =>
 
 app.UseCors();
 app.UseRateLimiter();
+app.MapHealthChecks("/health");
 app.MapControllers();
 
 app.Run();
