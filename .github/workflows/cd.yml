@@ -77,16 +77,22 @@ jobs:
           echo "=== Task definition — image and secret references ==="
           jq '{image: .containerDefinitions[0].image, secrets: .containerDefinitions[0].secrets}' task-definition.json
 
-          aws ecs register-task-definition \
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
             --cli-input-json file://task-definition.json \
-            --region $AWS_REGION
+            --region $AWS_REGION \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "Registered task definition: $NEW_TASK_DEF_ARN"
+          echo "new_task_def_arn=$NEW_TASK_DEF_ARN" >> $GITHUB_ENV
 
       - name: Deploy to ECS Fargate
         run: |
+          echo "Deploying: $new_task_def_arn"
           aws ecs update-service \
             --cluster $ECS_CLUSTER \
             --service $ECS_SERVICE \
-            --task-definition investment-tracker-api \
+            --task-definition "$new_task_def_arn" \
             --force-new-deployment \
             --region $AWS_REGION
 
