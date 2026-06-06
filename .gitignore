@@ -1,0 +1,16 @@
+# Build output
+bin/
+obj/
+
+# Environment
+.env
+*.env.local
+
+# IDE
+.vs/
+.vscode/
+*.user
+
+# OS
+.DS_Store
+Thumbs.db

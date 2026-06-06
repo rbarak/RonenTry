@@ -1,0 +1,13 @@
+# Exclude build artifacts so dotnet publish always recompiles from source
+backend/**/bin/
+backend/**/obj/
+
+# Tests not needed in the image
+backend/InvestmentTracker.Api.Tests/
+
+# Docs and infra scripts not needed in the image
+*.md
+infrastructure/
+.github/
+frontend/
+.git/

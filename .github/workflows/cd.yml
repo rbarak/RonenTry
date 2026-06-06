@@ -240,7 +240,9 @@ jobs:
             echo "Attempt $i: no migration lines yet — waiting 5s..."
             sleep 5
           done
-          [ -z "$MIGRATION_LINES" ] && echo "⚠️  Migration log lines not found after retries"
+          if [ -z "$MIGRATION_LINES" ]; then
+            echo "⚠️  Migration log lines not found after retries"
+          fi
 
       - name: Update frontend config.js with new ECS IP
         run: |
