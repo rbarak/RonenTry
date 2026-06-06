@@ -54,17 +54,29 @@ jobs:
             --task-definition investment-tracker-api \
             --query taskDefinition \
             --region $AWS_REGION | \
-          jq --arg IMAGE  "$IMAGE_URI" \
-             --arg ENV    "$ASPNETCORE_ENVIRONMENT" \
-             --arg CORS   "$CORS_ALLOWED_ORIGIN" \
-             --arg SECRET "${{ secrets.DB_SECRET_ARN }}" \
-             --arg ROLE   "${{ secrets.ECS_TASK_EXECUTION_ROLE_ARN }}" \
+          jq --arg IMAGE       "$IMAGE_URI" \
+             --arg DOTNET_ENV  "$ASPNETCORE_ENVIRONMENT" \
+             --arg CORS_ORIGIN "$CORS_ALLOWED_ORIGIN" \
+             --arg SECRET_ARN  "${{ secrets.DB_SECRET_ARN }}" \
+             --arg ROLE_ARN    "${{ secrets.ECS_TASK_EXECUTION_ROLE_ARN }}" \
              '
                .containerDefinitions[0].image = $IMAGE |
-               .executionRoleArn = $ROLE |
-               (.containerDefinitions[0].environment[] | select(.name == "ASPNETCORE_ENVIRONMENT")).value = $ENV |
-               (.containerDefinitions[0].environment[] | select(.name == "Cors__AllowedOrigin")).value = $CORS |
-               (.containerDefinitions[0].secrets[] | select(.name == "ConnectionStrings__DefaultConnection")).valueFrom = $SECRET |
+               .executionRoleArn = $ROLE_ARN |
+               .containerDefinitions[0].environment = (
+                 .containerDefinitions[0].environment | map(
+                   if .name == "ASPNETCORE_ENVIRONMENT" then .value = $DOTNET_ENV
+                   elif .name == "Cors__AllowedOrigin"  then .value = $CORS_ORIGIN
+                   else .
+                   end
+                 )
+               ) |
+               .containerDefinitions[0].secrets = (
+                 .containerDefinitions[0].secrets | map(
+                   if .name == "ConnectionStrings__DefaultConnection" then .valueFrom = $SECRET_ARN
+                   else .
+                   end
+                 )
+               ) |
                del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
                    .placementConstraints, .compatibilities, .registeredAt, .registeredBy)
              ' > task-definition.json
