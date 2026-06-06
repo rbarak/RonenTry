@@ -1,5 +1,5 @@
-// Development default. In production, replace this file (or its apiUrl value)
-// with the actual ECS Fargate / ALB endpoint before uploading to S3.
+// This file is overwritten automatically by the CD pipeline on each deploy.
+// For local dev, point to your local API or a known ECS IP.
 window.APP_CONFIG = {
-  apiUrl: 'http://34.227.223.172:8080/api/offices/register'
+  apiUrl: 'http://localhost:8080/api/offices/register'
 };

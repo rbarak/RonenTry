@@ -222,6 +222,44 @@ jobs:
             exit 1
           fi
 
+      - name: Verify DB migration in CloudWatch logs
+        run: |
+          sleep 5
+          LOG_STREAM=$(aws logs describe-log-streams \
+            --log-group-name /ecs/investment-tracker \
+            --order-by LastEventTime --descending \
+            --max-items 1 \
+            --query 'logStreams[0].logStreamName' --output text --region $AWS_REGION 2>/dev/null)
+
+          if [ -z "$LOG_STREAM" ] || [ "$LOG_STREAM" = "None" ]; then
+            echo "⚠️  No CloudWatch log streams found — migration status unknown"
+          else
+            echo "Log stream: $LOG_STREAM"
+            MIGRATION_LINES=$(aws logs get-log-events \
+              --log-group-name /ecs/investment-tracker \
+              --log-stream-name "$LOG_STREAM" \
+              --query 'events[*].message' --output text --region $AWS_REGION | \
+              grep -i "migration" || echo "No migration log lines found")
+            echo "$MIGRATION_LINES"
+          fi
+
+      - name: Update frontend config.js with new ECS IP
+        run: |
+          PUBLIC_IP="${{ steps.app-url.outputs.public_ip }}"
+          cat > frontend/config.js <<EOF
+          window.APP_CONFIG = {
+            apiUrl: 'http://${PUBLIC_IP}:8080/api/offices/register'
+          };
+          EOF
+          echo "config.js updated → http://$PUBLIC_IP:8080"
+
+      - name: Sync frontend to S3
+        run: |
+          aws s3 sync frontend/ s3://investment-tracker-frontend-648548511587/ \
+            --delete \
+            --region $AWS_REGION
+          echo "✅ Frontend synced to S3"
+
       - name: Print deployment summary
         if: success()
         run: |
@@ -234,9 +272,5 @@ jobs:
           echo "  Health check : $APP_URL/health"
           echo "  Register     : $APP_URL/api/offices/register"
           echo "  Frontend     : ${{ secrets.CORS_ALLOWED_ORIGIN }}"
+          echo "  config.js    : auto-updated and synced to S3"
           echo "=================================================="
-          echo ""
-          echo "NOTE: Update frontend/config.js with the API URL:"
-          echo "  window.APP_CONFIG = { apiUrl: '$APP_URL/api/offices/register' };"
-          echo "Then re-sync to S3:"
-          echo "  aws s3 sync frontend/ s3://investment-tracker-frontend-648548511587/"
