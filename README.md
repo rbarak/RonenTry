@@ -87,21 +87,31 @@ dotnet ef database update
 
 ---
 
+## CI/CD Pipeline
+
+Two separate workflows in `.github/workflows/`:
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| `ci.yml` | Manual (`workflow_dispatch`) | Build → test (32 xUnit tests) → push Docker image to ECR (SHA + `latest` tags) |
+| `cd.yml` | Auto after CI succeeds | Generate `.env` from Secrets → update ECS task definition → deploy → health check → print live URL |
+| `deploy.yml` | Disabled | Legacy — replaced by ci.yml + cd.yml |
+
 ## AWS Deployment
 
-See [infrastructure/aws-deploy.md](infrastructure/aws-deploy.md) for step-by-step instructions to deploy to AWS ECS Fargate with RDS SQL Server and CloudFront-hosted frontend.
+See [infrastructure/aws-deploy.md](infrastructure/aws-deploy.md) for step-by-step setup guide and full resource reference.
 
-The CI/CD pipeline (`.github/workflows/deploy.yml`) triggers automatically on push to `main`.
-
-### Deployment Status (as of 2026-06-05)
+### Deployment Status (as of 2026-06-06)
 
 | Layer | Status | Notes |
 |-------|--------|-------|
-| AWS Infrastructure | ✅ Provisioned | All resources created in `us-east-1` |
-| Code committed | ❌ Pending | Run `git add . && git commit && git push` |
-| Docker image in ECR | ❌ Pending | Built automatically by GitHub Actions on first push |
-| ECS task running | ❌ Pending | Starts after Docker image is pushed |
+| AWS infrastructure | ✅ Provisioned | All resources in `us-east-1` — see `aws-deploy.md` |
+| S3 frontend bucket | ✅ Created | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` |
+| Code committed & pushed | ✅ Done | All commits on `main` branch |
+| GitHub Secrets | ✅ Configured | 9 secrets set (see `aws-deploy.md` for full list) |
+| Docker image in ECR | ✅ Pushed | CI pipeline succeeded; image tagged with SHA + `latest` |
+| ECS task running | ⚠️ Pending | CD pipeline being debugged — trigger CI to verify latest fix |
 | DB migration | ❌ Pending | Run once ECS task is healthy |
-| Frontend on S3/CloudFront | ❌ Pending | Can open `frontend/index.html` locally in the meantime |
+| `frontend/config.js` updated | ❌ Pending | Update with ECS task public IP after first successful CD run |
 
-**Next action:** Add 6 GitHub Secrets (see `infrastructure/aws-deploy.md` → Step 11), then `git push`.
+**Next action:** Trigger CI manually → watch CD → get ECS IP → update config.js → run migration.

@@ -2,7 +2,7 @@
 
 ## Provisioned Resources (2026-06-05)
 
-> All infrastructure below was created on 2026-06-05. Use these IDs directly — no need to re-run the provisioning steps.
+> All infrastructure was created on 2026-06-05. Use these IDs directly — no need to re-run the provisioning steps.
 
 **Account:** `648548511587` · **Region:** `us-east-1`
 
@@ -15,48 +15,62 @@
 | CloudWatch log group | `/ecs/investment-tracker` | [CloudWatch](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/%2Fecs%2Finvestment-tracker) |
 | ECS cluster | `investment-tracker-cluster` | [ECS](https://console.aws.amazon.com/ecs/v2/clusters/investment-tracker-cluster?region=us-east-1) |
 | ECS service | `investment-tracker-api` | [ECS Service](https://console.aws.amazon.com/ecs/v2/clusters/investment-tracker-cluster/services/investment-tracker-api?region=us-east-1) |
-| ECS task definition | `investment-tracker-api:1` | [Task Definitions](https://console.aws.amazon.com/ecs/v2/task-definitions/investment-tracker-api?region=us-east-1) |
+| ECS task definition | `investment-tracker-api` (multiple revisions) | [Task Definitions](https://console.aws.amazon.com/ecs/v2/task-definitions/investment-tracker-api?region=us-east-1) |
 | RDS instance | `investment-tracker-db` | [RDS](https://console.aws.amazon.com/rds/home?region=us-east-1#database:id=investment-tracker-db) |
 | Secrets Manager | `investment-tracker/db-connection-KMHXlO` | [Secrets Manager](https://console.aws.amazon.com/secretsmanager/home?region=us-east-1#!/listSecrets) |
+| S3 frontend bucket | `investment-tracker-frontend-648548511587` | [S3](https://console.aws.amazon.com/s3/buckets/investment-tracker-frontend-648548511587?region=us-east-1) |
 
 **RDS endpoint:** `investment-tracker-db.cc9isgm6qkub.us-east-1.rds.amazonaws.com`
 
 **ECR image URI:** `648548511587.dkr.ecr.us-east-1.amazonaws.com/investment-tracker-api`
 
-### GitHub Secrets — ready to copy
+**S3 frontend URL:** `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com`
 
-Go to: https://github.com/RonenBarak/RonenTry/settings/secrets/actions
+**Secrets Manager ARN (hardcoded in cd.yml):** `arn:aws:secretsmanager:us-east-1:648548511587:secret:investment-tracker/db-connection-KMHXlO`
 
-| Secret | Value |
-|--------|-------|
-| `AWS_ACCESS_KEY_ID` | *(Ronen IAM user access key — from IAM Console → Users → Ronen → Security credentials)* |
-| `AWS_SECRET_ACCESS_KEY` | *(Ronen IAM user secret key)* |
-| `AWS_REGION` | `us-east-1` |
-| `ECR_REPOSITORY` | `investment-tracker-api` |
-| `ECS_CLUSTER` | `investment-tracker-cluster` |
-| `ECS_SERVICE` | `investment-tracker-api` |
+### GitHub Secrets — 9 required
 
-### Current deployment status
+Go to: https://github.com/rbarak/RonenTry/settings/secrets/actions
 
-| Step | Status |
-|------|--------|
-| AWS infrastructure | ✅ Provisioned |
-| GitHub Secrets added | ❌ Pending |
-| Code committed & pushed | ❌ Pending |
-| Docker image in ECR | ❌ Pending (built by GitHub Actions on first push) |
-| ECS task healthy | ❌ Pending (starts after image is pushed) |
-| DB migration run | ❌ Pending (run once ECS task is healthy) |
-| Frontend on S3/CloudFront | ❌ Pending (optional — can test locally first) |
+| Secret | Value | Status |
+|--------|-------|--------|
+| `AWS_ACCESS_KEY_ID` | Ronen IAM user access key | ✅ Set |
+| `AWS_SECRET_ACCESS_KEY` | Ronen IAM user secret key | ✅ Set |
+| `AWS_REGION` | `us-east-1` | ✅ Set |
+| `ECR_REPOSITORY` | `investment-tracker-api` | ✅ Set |
+| `ECS_CLUSTER` | `investment-tracker-cluster` | ✅ Set |
+| `ECS_SERVICE` | `investment-tracker-api` | ✅ Set |
+| `ASPNETCORE_ENVIRONMENT` | `Production` | ✅ Set |
+| `CORS_ALLOWED_ORIGIN` | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` | ✅ Set |
+| `ECS_TASK_EXECUTION_ROLE_ARN` | `arn:aws:iam::648548511587:role/ecsTaskExecutionRole` | ✅ Set |
+
+> `DB_SECRET_ARN` is **no longer a required secret** — the Secrets Manager ARN is hardcoded directly in `cd.yml` to avoid ARN formatting issues that caused ECS to route to SSM instead of Secrets Manager.
+
+### Current deployment status (as of 2026-06-06)
+
+| Step | Status | Notes |
+|------|--------|-------|
+| AWS infrastructure | ✅ Done | All resources provisioned |
+| S3 frontend bucket | ✅ Done | Files uploaded; config.js has `localhost` placeholder |
+| GitHub Secrets | ✅ Done | All 9 secrets configured |
+| Code committed & pushed | ✅ Done | All commits on `main` |
+| Docker image in ECR | ✅ Done | CI pipeline succeeded |
+| ECS task healthy | ⚠️ Pending | CD being debugged — trigger CI to verify latest fix |
+| DB migration | ❌ Pending | Run once ECS task is confirmed healthy |
+| `frontend/config.js` | ❌ Pending | Update with ECS task public IP, then re-sync to S3 |
 
 ### Cost note
 
-Estimated ~$1.10 for a 48-hour POC (RDS `db.t3.micro` at $0.016/hr is the main cost). Delete the RDS instance after testing to stop charges: `aws rds delete-db-instance --db-instance-identifier investment-tracker-db --skip-final-snapshot --region us-east-1`
+~$0.016/hr for RDS db.t3.micro (main cost). Delete after POC:
+```bash
+aws rds delete-db-instance --db-instance-identifier investment-tracker-db --skip-final-snapshot --region us-east-1
+```
 
-### Known issues / limitations
+### Known issues / lessons learned (2026-06-06)
 
-- **ECS task public IP changes** on every task replacement (redeployment). After each GitHub Actions deploy, re-check the IP and update `frontend/config.js` before using the form. Add an ALB for a stable DNS endpoint.
-- **No S3/CloudFront yet** — frontend runs locally (`open frontend/index.html`) until S3 is set up (Step 9 below).
-- **`Cors__AllowedOrigin` is set to `http://localhost`** in the current task definition. Update it after CloudFront is configured.
+- **ECS `valueFrom` routing**: a plain secret name (no `arn:` prefix) routes to **SSM Parameter Store**, not Secrets Manager. Always use the full `arn:aws:secretsmanager:...` ARN. Now hardcoded in `cd.yml`.
+- **ECS task public IP changes** on every redeployment. Update `frontend/config.js` and re-sync S3 after each CD run. Add an ALB for a stable DNS endpoint in production.
+- **jq `$ENV` is a reserved built-in** — never use `--arg ENV` in jq filters; it injects the entire process environment. Use `$DOTNET_ENV`, `$CORS_ORIGIN`, etc.
 
 ---
 

@@ -75,11 +75,23 @@ NuGet packages: `BCrypt.Net-Next` (password hashing), `Microsoft.EntityFramework
 
 ## API
 
-Single endpoint: `POST /api/offices/register` — request/response shapes in `spec.md`.
+Two endpoints:
+- `POST /api/offices/register` — register a CPA office (request/response shapes in `spec.md`)
+- `GET /health` → `200 Healthy` — used by the CD pipeline health check after every deployment
+
+## CI/CD Workflows
+
+| File | Trigger | Purpose |
+|------|---------|---------|
+| `.github/workflows/ci.yml` | `workflow_dispatch` (manual) | Build → 32 xUnit tests → Docker push to ECR (SHA + latest) |
+| `.github/workflows/cd.yml` | Auto when CI succeeds | Update ECS task def → deploy → 15-min wait loop → health check → print URL |
+| `.github/workflows/deploy.yml` | Disabled | Legacy — replaced by ci.yml + cd.yml |
+
+**CD jq critical rule:** ECS `valueFrom` for secrets must use the full `arn:aws:secretsmanager:...` ARN. A plain secret name (no `arn:` prefix) routes to SSM Parameter Store instead of Secrets Manager. The ARN is hardcoded in `cd.yml` to avoid formatting issues.
 
 ## AWS Environment (us-east-1, account 648548511587)
 
-All infrastructure was provisioned on 2026-06-05. Use these IDs when working with AWS CLI or console.
+All infrastructure provisioned 2026-06-05. AWS CLI path on this machine: `C:\Program Files\Amazon\AWSCLIV2\aws.exe` (not in PATH — use `& $AWS` pattern).
 
 | Resource | Name / ID |
 |----------|-----------|
@@ -89,12 +101,11 @@ All infrastructure was provisioned on 2026-06-05. Use these IDs when working wit
 | ECR repository | `648548511587.dkr.ecr.us-east-1.amazonaws.com/investment-tracker-api` |
 | CloudWatch log group | `/ecs/investment-tracker` |
 | ECS cluster | `investment-tracker-cluster` |
-| ECS service | `investment-tracker-api` |
-| ECS task definition | `investment-tracker-api:1` |
+| ECS service | `investment-tracker-api` (desired-count=1) |
 | RDS endpoint | `investment-tracker-db.cc9isgm6qkub.us-east-1.rds.amazonaws.com` |
-| Secrets Manager | `investment-tracker/db-connection-KMHXlO` |
+| Secrets Manager ARN | `arn:aws:secretsmanager:us-east-1:648548511587:secret:investment-tracker/db-connection-KMHXlO` |
+| S3 frontend | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` |
 
-**Current state:** Code is written and reviewed but **not yet committed**. The ECS service is running with `desired-count=1` but will fail to start until a Docker image is pushed to ECR by GitHub Actions.
+**Current state (2026-06-06):** Code committed, CI ✅ passing (32 tests), Docker image in ECR ✅. CD pipeline being debugged — latest fix restores full Secrets Manager ARN in task definition. ECS task not yet running. DB migration not yet run. `frontend/config.js` still has `localhost` placeholder.
 
-**To deploy:** Add GitHub Secrets → `git add . && git commit && git push` → GitHub Actions handles the rest.  
-See `infrastructure/aws-deploy.md` Step 11 for the GitHub Secrets values.
+**GitHub Secrets required (9):** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `ECR_REPOSITORY`, `ECS_CLUSTER`, `ECS_SERVICE`, `ASPNETCORE_ENVIRONMENT`, `CORS_ALLOWED_ORIGIN`, `ECS_TASK_EXECUTION_ROLE_ARN`. Full values in `infrastructure/aws-deploy.md`.
