@@ -72,7 +72,7 @@ jobs:
                .containerDefinitions[0].secrets = (
                  .containerDefinitions[0].secrets | map(
                    if .name == "ConnectionStrings__DefaultConnection"
-                     then .valueFrom = "investment-tracker/db-connection"
+                     then .valueFrom = "arn:aws:secretsmanager:us-east-1:648548511587:secret:investment-tracker/db-connection-KMHXlO"
                    else .
                    end
                  )
@@ -163,6 +163,7 @@ jobs:
           LOG_STREAM=$(aws logs describe-log-streams \
             --log-group-name /ecs/investment-tracker \
             --order-by LastEventTime --descending \
+            --max-items 1 \
             --query 'logStreams[0].logStreamName' --output text --region $AWS_REGION 2>/dev/null)
 
           if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ]; then
