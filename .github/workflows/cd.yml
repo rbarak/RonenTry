@@ -69,14 +69,7 @@ jobs:
                    end
                  )
                ) |
-               .containerDefinitions[0].secrets = (
-                 .containerDefinitions[0].secrets | map(
-                   if .name == "ConnectionStrings__DefaultConnection"
-                     then .valueFrom = "arn:aws:secretsmanager:us-east-1:648548511587:secret:investment-tracker/db-connection-KMHXlO"
-                   else .
-                   end
-                 )
-               ) |
+               .containerDefinitions[0].secrets = [{"name": "ConnectionStrings__DefaultConnection", "valueFrom": "arn:aws:secretsmanager:us-east-1:648548511587:secret:investment-tracker/db-connection-KMHXlO"}] |
                del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
                    .placementConstraints, .compatibilities, .registeredAt, .registeredBy)
              ' > task-definition.json
