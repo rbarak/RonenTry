@@ -57,7 +57,6 @@ jobs:
           jq --arg IMAGE       "$IMAGE_URI" \
              --arg DOTNET_ENV  "$ASPNETCORE_ENVIRONMENT" \
              --arg CORS_ORIGIN "$CORS_ALLOWED_ORIGIN" \
-             --arg SECRET_ARN  "${{ secrets.DB_SECRET_ARN }}" \
              --arg ROLE_ARN    "${{ secrets.ECS_TASK_EXECUTION_ROLE_ARN }}" \
              '
                .containerDefinitions[0].image = $IMAGE |
@@ -72,7 +71,8 @@ jobs:
                ) |
                .containerDefinitions[0].secrets = (
                  .containerDefinitions[0].secrets | map(
-                   if .name == "ConnectionStrings__DefaultConnection" then .valueFrom = $SECRET_ARN
+                   if .name == "ConnectionStrings__DefaultConnection"
+                     then .valueFrom = "investment-tracker/db-connection"
                    else .
                    end
                  )
@@ -80,6 +80,9 @@ jobs:
                del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
                    .placementConstraints, .compatibilities, .registeredAt, .registeredBy)
              ' > task-definition.json
+
+          echo "=== Task definition — image and secret references ==="
+          jq '{image: .containerDefinitions[0].image, secrets: .containerDefinitions[0].secrets}' task-definition.json
 
           aws ecs register-task-definition \
             --cli-input-json file://task-definition.json \
