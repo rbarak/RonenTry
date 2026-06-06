@@ -167,7 +167,7 @@ jobs:
             aws logs get-log-events \
               --log-group-name /ecs/investment-tracker \
               --log-stream-name "$LOG_STREAM" \
-              --limit 50 --start-from-head false \
+              --limit 50 \
               --query 'events[*].message' --output text --region $AWS_REGION
           else
             echo "No log streams found in /ecs/investment-tracker"
