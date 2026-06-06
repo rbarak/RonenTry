@@ -46,19 +46,17 @@ Go to: https://github.com/rbarak/RonenTry/settings/secrets/actions
 
 > `DB_SECRET_ARN` is **no longer a required secret** — the Secrets Manager ARN is hardcoded directly in `cd.yml` to avoid ARN formatting issues that caused ECS to route to SSM instead of Secrets Manager.
 
-### Current deployment status (as of 2026-06-06, end of day)
+### Current deployment status (as of 2026-06-07)
 
 | Step | Status | Notes |
 |------|--------|-------|
-| AWS infrastructure | ✅ Provisioned | All resources created in `us-east-1` |
-| S3 frontend bucket | ✅ Synced | Files uploaded; config.js points to `34.227.223.172:8080` |
-| GitHub Secrets | ✅ Configured | All 9 secrets set (see table below) |
-| Code committed & pushed | ✅ Done | Latest commit (22538c1) includes auto-migration + config.js |
-| CI pipeline | ✅ Working | 32 tests pass; Docker image in ECR with SHA + `latest` tags |
-| CD pipeline | ✅ Deployed | ECS task running at `34.227.223.172:8080` |
-| Health check | ✅ Passing | `GET /health` returns `200 Healthy` |
-| DB auto-migration | ⚠️ Ready | Code in place; runs on next ECS startup (needs CI trigger to deploy) |
-| Registration form | ⚠️ Ready for testing | Config.js updated, S3 synced; test after next deployment |
+| AWS infrastructure | ✅ Provisioned | All resources in `us-east-1` |
+| S3 frontend | ✅ Live + auto-synced | CD updates config.js + syncs S3 on every deploy |
+| GitHub Secrets | ✅ Configured | All 9 secrets set |
+| ECR image | ✅ Built | Image `5077ded`, task def revision 13 |
+| ECS task | ✅ Running | Health check passing |
+| DB migration | ✅ Applied | `InitialCreate` — Offices table, sequence, indexes created |
+| Registration form | ✅ Working | Offices 111, 112, 113 registered successfully |
 
 ### GitHub Secrets Configuration (9 required)
 
@@ -108,10 +106,9 @@ aws rds delete-db-instance --db-instance-identifier investment-tracker-db --skip
 - Fix: custom loop polls every 20 seconds, shows progress, has 15-min timeout
 - Added `Diagnose deployment failure` step that runs on any failure and prints stopped task reason + CloudWatch logs
 
-**S3 frontend requires manual sync after config changes**
-- S3 static hosting works, but no CI/CD integration yet
-- After updating `frontend/config.js` with new ECS IP, must manually run: `aws s3 sync frontend/ s3://investment-tracker-frontend-648548511587/`
-- Future: add S3 sync step to CD workflow
+**S3 frontend auto-synced by CD** ✅ FIXED
+- CD pipeline now auto-generates `config.js` with the new ECS task IP and runs `aws s3 sync` after every deploy
+- No manual intervention needed after deployments
 
 **RDS is in private subnet (no direct local access)**
 - Windows machine cannot reach RDS directly (security group restricts inbound to ECS SG only)
@@ -122,34 +119,32 @@ aws rds delete-db-instance --db-instance-identifier investment-tracker-db --skip
 - `Program.cs` calls `db.Database.MigrateAsync()` before `app.Run()`
 - EF Core checks `__EFMigrationsHistory` table and skips if migration already applied
 - Safe for every restart; no risk of duplicate table creation
-- Requires migrations to be compiled into the assembly (not separately managed) — currently `InitialCreate` is compiled in
+- Requires migrations to be compiled into the assembly — **both** `InitialCreate.cs` AND `InitialCreate.Designer.cs` must be committed
+
+**`obj/` and `bin/` committed to git** ✅ FIXED
+- Caused MSBuild Up2Date sentinel to skip recompilation in Docker, using stale local DLL
+- Fix: added `.gitignore` and `.dockerignore`; removed 498 tracked artifacts with `git rm -r --cached`
+
+**Migration designer file missing** ✅ FIXED
+- `20260604000000_InitialCreate.Designer.cs` was never committed
+- Without `[Migration("...")]` attribute, EF Core reports "No migrations were found" → Offices table never created → SQL Error 208
+- Fix: created and committed the designer file
+
+**`aws ecs update-service --task-definition <name>`** ✅ FIXED
+- Using the name (not revision ARN) resolves to whatever is currently latest
+- If `register-task-definition` fails silently, old revision is redeployed and wait loop exits instantly ("1-second deploy")
+- Fix: capture new ARN from register output, pass it explicitly to update-service
 
 ---
 
-## Next Steps for Tomorrow (2026-06-07)
+## Current Status (2026-06-07) — Form is Live and Working
 
-### Immediate (5 minutes)
-1. **Trigger CI manually:** https://github.com/rbarak/RonenTry/actions/workflows/ci.yml → "Run workflow" → select `main` → "Run"
-2. **Watch CD auto-deploy** (~5 minutes): CI will trigger CD automatically
-   - CD will create new ECS task with updated code
-   - `db.Database.MigrateAsync()` runs on task startup
-   - New task public IP will be different — check the CD log output
+Registration form fully functional. Offices 111, 112, 113 registered.
 
-### Short-term (15 minutes)
-3. **Test the registration form:**
-   - Open: `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com`
-   - Fill in Hebrew form with valid data
-   - Expected response: success banner with `officeId ≥ 111`
-   - Check CloudWatch logs if there's an error: https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/%2Fecs%2Finvestment-tracker
-
-### Known gotchas to watch for
-- If form shows "Server connection error" (`שגיאת חיבור לשרת`): DB migration may not have run yet (check ECS task startup logs)
-- If deployment times out: check "Diagnose deployment failure" section in CD log for the actual error
-- If ECS IP changed: you may need to update `frontend/config.js` and re-sync S3 (see ECS Service → Task page for new IP)
-
-### After testing works
-- Delete RDS (costs ~$1.10/day): `aws rds delete-db-instance --db-instance-identifier investment-tracker-db --skip-final-snapshot --region us-east-1`
-- Or keep running for continued testing
+**Next recommended improvements:**
+- Add ALB for stable DNS endpoint (ECS task IP changes on every deploy)
+- Add CloudFront in front of S3 for HTTPS on frontend
+- Change CI trigger from manual to `push: branches: [main]`
 
 ---
 

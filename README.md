@@ -6,6 +6,16 @@ A web application for CPA offices to register and manage client investment infor
 
 ---
 
+## Live URLs
+
+| Resource | URL |
+|---|---|
+| Frontend | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` |
+| API Health | `http://<ECS_IP>:8080/health` (IP changes per deployment — auto-updated by CD) |
+| CloudWatch Logs | `/ecs/investment-tracker` log group in `us-east-1` |
+
+---
+
 ## Local Development
 
 ### Prerequisites
@@ -14,43 +24,19 @@ A web application for CPA offices to register and manage client investment infor
 ### Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/RonenBarak/RonenTry.git
+git clone https://github.com/rbarak/RonenTry.git
 cd RonenTry
-
-# Copy environment file
 cp infrastructure/.env.example infrastructure/.env
-# Edit infrastructure/.env with your preferred SA password
-
-# Start all services
+# Edit infrastructure/.env with your SA password
 cd infrastructure
 docker-compose up
 ```
 
-The API will be available at `http://localhost:8080`.  
-Open `frontend/index.html` in your browser to use the registration form.
-
-### Run migrations (first time)
-
-```bash
-cd backend/InvestmentTracker.Api
-dotnet ef database update
-```
+API runs on `http://localhost:8080`. Open `frontend/index.html` in your browser.
 
 ---
 
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SA_PASSWORD` | SQL Server SA password | — |
-| `ConnectionStrings__DefaultConnection` | Full ADO.NET connection string | see `.env.example` |
-| `CORS_ALLOWED_ORIGIN` | Allowed frontend origin for CORS | `http://localhost` |
-| `ASPNETCORE_ENVIRONMENT` | ASP.NET Core environment | `Development` |
-
----
-
-## API Endpoint
+## API Endpoints
 
 ### `POST /api/offices/register`
 
@@ -68,54 +54,54 @@ dotnet ef database update
 
 **Success `200`:**
 ```json
-{
-  "success": true,
-  "officeId": 111,
-  "message": "Office registered successfully"
-}
+{ "success": true, "officeId": 111, "message": "Office registered successfully" }
 ```
 
 **Error `400`:**
 ```json
-{
-  "success": false,
-  "message": "מספר הטלפון כבר קיים במערכת"
-}
+{ "success": false, "message": "מספר הטלפון כבר קיים במערכת" }
 ```
 
-**Rate limit:** 5 requests per minute per IP → `429 Too Many Requests`
+**Rate limit:** 5 requests/minute per IP → `429`
+
+### `GET /health`
+Returns `200 Healthy` — used by CD pipeline after every deployment.
 
 ---
 
 ## CI/CD Pipeline
 
-Two separate workflows in `.github/workflows/`:
-
 | Workflow | Trigger | What it does |
-|----------|---------|-------------|
-| `ci.yml` | Manual (`workflow_dispatch`) | Build → test (32 xUnit tests) → push Docker image to ECR (SHA + `latest` tags) |
-| `cd.yml` | Auto after CI succeeds | Generate `.env` from Secrets → update ECS task definition → deploy → health check → print live URL |
-| `deploy.yml` | Disabled | Legacy — replaced by ci.yml + cd.yml |
+|---|---|---|
+| `ci.yml` | Manual (`workflow_dispatch`) | Build → 32 xUnit tests → Docker push to ECR (SHA + `latest`) |
+| `cd.yml` | Auto after CI succeeds | Update task def → deploy → wait → health check → auto-update config.js → S3 sync |
 
-## AWS Deployment
+See [CICD.md](CICD.md) for full architecture and pipeline explanation.
 
-See [infrastructure/aws-deploy.md](infrastructure/aws-deploy.md) for step-by-step setup guide and full resource reference.
+---
 
-### Deployment Status (as of 2026-06-06, end of day)
+## Deployment Status (2026-06-07)
 
-| Layer | Status | Details |
-|-------|--------|---------|
-| AWS infrastructure | ✅ Provisioned | All resources in `us-east-1` (see `aws-deploy.md` for full list & console links) |
-| S3 frontend bucket | ✅ Created & synced | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` |
-| Code committed & pushed | ✅ Done | All changes on `main`; latest commit (22538c1) includes auto-migration + config.js |
+| Layer | Status | Notes |
+|---|---|---|
+| AWS infrastructure | ✅ Provisioned | All resources in `us-east-1` |
+| S3 frontend | ✅ Live | Auto-synced by CD on every deploy |
 | GitHub Secrets | ✅ Configured | All 9 secrets set |
-| Docker image in ECR | ✅ Built | CI passed; image in ECR with SHA + `latest` tags |
-| ECS task running | ✅ Live | Running at `34.227.223.172:8080` (health check: `/health`) |
-| DB auto-migration | ⚠️ Pending | Ready in code; runs on next ECS startup (needs CI trigger to deploy) |
-| Frontend form | ⚠️ Testing | Config.js updated with ECS IP; S3 synced; ready after next deployment |
+| ECR image | ✅ Built | Task def revision 13, image `5077ded` |
+| ECS task | ✅ Running | Health check passing |
+| DB migration | ✅ Applied | `InitialCreate` — Offices table, sequence, indexes |
+| Registration form | ✅ Working | Offices 111, 112, 113 registered |
+| config.js auto-update | ✅ Automated | CD updates + syncs S3 on every deploy |
 
-**Next action:** 
-1. Trigger CI manually (GitHub Actions → ci.yml → Run workflow)
-2. Watch CD deploy (auto-runs after CI succeeds)
-3. Open S3 URL and test the Hebrew registration form
-4. Expected: success banner with `officeId ≥ 111`
+---
+
+## Documentation
+
+| File | Contents |
+|---|---|
+| [CICD.md](CICD.md) | Full architecture, why each AWS service, CI/CD flow |
+| [database_connection.md](database_connection.md) | Connect to RDS from VS Code, useful queries |
+| [Troubleshoot.md](Troubleshoot.md) | All issues encountered and fixes applied |
+| [infrastructure/aws-deploy.md](infrastructure/aws-deploy.md) | AWS setup guide, resource IDs, lessons learned |
+| [infrastructure/schema.sql](infrastructure/schema.sql) | Manual DB schema script (fallback if EF migration fails) |
+| [spec.md](spec.md) | Full product specification — source of truth |

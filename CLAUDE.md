@@ -115,13 +115,21 @@ All infrastructure provisioned 2026-06-05. AWS CLI path on this machine: `C:\Pro
 | Secrets Manager ARN | `arn:aws:secretsmanager:us-east-1:648548511587:secret:investment-tracker/db-connection-KMHXlO` |
 | S3 frontend | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` |
 
-**Current state (2026-06-06, end of day):** 
-- Code committed (latest: 22538c1 — auto-migration + config.js)
-- CI ✅ passing (32 tests, Docker image in ECR with SHA + `latest`)
-- CD ✅ deployed (ECS task running at `34.227.223.172:8080`)
+**Current state (2026-06-07):**
+- CI ✅ passing (32 tests, image `5077ded` in ECR with SHA + `latest`)
+- CD ✅ deployed — task definition revision 13
 - Health check ✅ (`GET /health` returns 200)
-- Frontend ✅ synced to S3 with live ECS IP
-- DB auto-migration ready (runs on next ECS startup)
-- Form ready for testing (needs next CI trigger to deploy migration + test)
+- DB migration ✅ applied — `Applying migration '20260604000000_InitialCreate'`
+- Registration form ✅ working — offices 111, 112, 113 registered
+- config.js ✅ auto-updated and S3-synced by CD on every deploy
+
+**Key fixes applied (2026-06-07):**
+- Added `.gitignore` and `.dockerignore` — removed 498 committed `obj/bin` artifacts that caused MSBuild to skip recompilation
+- Added `20260604000000_InitialCreate.Designer.cs` — EF Core requires `[Migration("...")]` attribute to recognise migration class; without it "No migrations were found" and Offices table never created
+- Fixed jq secrets assignment — changed from conditional `map()` to direct array literal; prevents Secrets Manager ARN from being silently corrupted
+- Fixed CD deploy — now captures new task definition ARN from `register-task-definition` and passes it explicitly to `update-service` (prevents "1-second deploy" where old revision reused)
+- Migration verification step — derives log stream from task ID directly; retries 6× for startup lag; fixed bash exit-code bug
+- Auto S3 sync in CD — config.js regenerated with current ECS IP and synced to S3 after every deploy
+- Added `infrastructure/schema.sql` — idempotent manual fallback to create schema if EF migration fails
 
 **GitHub Secrets required (9):** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `ECR_REPOSITORY`, `ECS_CLUSTER`, `ECS_SERVICE`, `ASPNETCORE_ENVIRONMENT`, `CORS_ALLOWED_ORIGIN`, `ECS_TASK_EXECUTION_ROLE_ARN`. Full values in `infrastructure/aws-deploy.md`.
