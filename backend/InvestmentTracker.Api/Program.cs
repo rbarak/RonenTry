@@ -52,7 +52,17 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
+    var migrationLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        await db.Database.MigrateAsync();
+        migrationLogger.LogInformation("Database migration completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        migrationLogger.LogCritical(ex, "Database migration failed. Application cannot start.");
+        throw;
+    }
 }
 
 app.Run();
