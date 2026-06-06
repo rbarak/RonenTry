@@ -1,0 +1,90 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+
+jobs:
+  deploy:
+    name: Deploy to AWS ECS
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Generate .env from GitHub Secrets
+        run: |
+          {
+            echo "ASPNETCORE_ENVIRONMENT=${{ secrets.ASPNETCORE_ENVIRONMENT }}"
+            echo "CORS_ALLOWED_ORIGIN=${{ secrets.CORS_ALLOWED_ORIGIN }}"
+            echo "IMAGE_TAG=${{ github.event.workflow_run.head_sha }}"
+            echo "ECS_CLUSTER=${{ secrets.ECS_CLUSTER }}"
+            echo "ECS_SERVICE=${{ secrets.ECS_SERVICE }}"
+          } > infrastructure/.env
+
+          # Export to GitHub Actions environment for subsequent steps
+          cat infrastructure/.env >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Update ECS task definition and register new revision
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          aws ecs describe-task-definition \
+            --task-definition investment-tracker-api \
+            --query taskDefinition \
+            --region $AWS_REGION | \
+          jq --arg IMAGE  "$IMAGE_URI" \
+             --arg ENV    "$ASPNETCORE_ENVIRONMENT" \
+             --arg CORS   "$CORS_ALLOWED_ORIGIN" \
+             --arg SECRET "${{ secrets.DB_SECRET_ARN }}" \
+             --arg ROLE   "${{ secrets.ECS_TASK_EXECUTION_ROLE_ARN }}" \
+             '
+               .containerDefinitions[0].image = $IMAGE |
+               .executionRoleArn = $ROLE |
+               (.containerDefinitions[0].environment[] | select(.name == "ASPNETCORE_ENVIRONMENT")).value = $ENV |
+               (.containerDefinitions[0].environment[] | select(.name == "Cors__AllowedOrigin")).value = $CORS |
+               (.containerDefinitions[0].secrets[] | select(.name == "ConnectionStrings__DefaultConnection")).valueFrom = $SECRET |
+               del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                   .placementConstraints, .compatibilities, .registeredAt, .registeredBy)
+             ' > task-definition.json
+
+          aws ecs register-task-definition \
+            --cli-input-json file://task-definition.json \
+            --region $AWS_REGION
+
+      - name: Deploy to ECS Fargate
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --task-definition investment-tracker-api \
+            --force-new-deployment \
+            --region $AWS_REGION
+
+      - name: Wait for deployment to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --region $AWS_REGION
