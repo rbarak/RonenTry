@@ -46,18 +46,37 @@ Go to: https://github.com/rbarak/RonenTry/settings/secrets/actions
 
 > `DB_SECRET_ARN` is **no longer a required secret** — the Secrets Manager ARN is hardcoded directly in `cd.yml` to avoid ARN formatting issues that caused ECS to route to SSM instead of Secrets Manager.
 
-### Current deployment status (as of 2026-06-06)
+### Current deployment status (as of 2026-06-06, end of day)
 
 | Step | Status | Notes |
 |------|--------|-------|
-| AWS infrastructure | ✅ Done | All resources provisioned |
-| S3 frontend bucket | ✅ Done | Files uploaded; config.js has `localhost` placeholder |
-| GitHub Secrets | ✅ Done | All 9 secrets configured |
-| Code committed & pushed | ✅ Done | All commits on `main` |
-| Docker image in ECR | ✅ Done | CI pipeline succeeded |
-| ECS task healthy | ⚠️ Pending | CD being debugged — trigger CI to verify latest fix |
-| DB migration | ❌ Pending | Run once ECS task is confirmed healthy |
-| `frontend/config.js` | ❌ Pending | Update with ECS task public IP, then re-sync to S3 |
+| AWS infrastructure | ✅ Provisioned | All resources created in `us-east-1` |
+| S3 frontend bucket | ✅ Synced | Files uploaded; config.js points to `34.227.223.172:8080` |
+| GitHub Secrets | ✅ Configured | All 9 secrets set (see table below) |
+| Code committed & pushed | ✅ Done | Latest commit (22538c1) includes auto-migration + config.js |
+| CI pipeline | ✅ Working | 32 tests pass; Docker image in ECR with SHA + `latest` tags |
+| CD pipeline | ✅ Deployed | ECS task running at `34.227.223.172:8080` |
+| Health check | ✅ Passing | `GET /health` returns `200 Healthy` |
+| DB auto-migration | ⚠️ Ready | Code in place; runs on next ECS startup (needs CI trigger to deploy) |
+| Registration form | ⚠️ Ready for testing | Config.js updated, S3 synced; test after next deployment |
+
+### GitHub Secrets Configuration (9 required)
+
+Go to: https://github.com/rbarak/RonenTry/settings/secrets/actions
+
+| Secret | Value | Purpose | Status |
+|--------|-------|---------|--------|
+| `AWS_ACCESS_KEY_ID` | Ronen IAM user access key | ECR login + ECS deploy | ✅ Set |
+| `AWS_SECRET_ACCESS_KEY` | Ronen IAM user secret key | ECR login + ECS deploy | ✅ Set |
+| `AWS_REGION` | `us-east-1` | All AWS CLI commands | ✅ Set |
+| `ECR_REPOSITORY` | `investment-tracker-api` | Docker image name in ECR | ✅ Set |
+| `ECS_CLUSTER` | `investment-tracker-cluster` | ECS cluster name | ✅ Set |
+| `ECS_SERVICE` | `investment-tracker-api` | ECS service name | ✅ Set |
+| `ASPNETCORE_ENVIRONMENT` | `Production` | App environment setting | ✅ Set |
+| `CORS_ALLOWED_ORIGIN` | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` | Frontend origin (CORS) | ✅ Set |
+| `ECS_TASK_EXECUTION_ROLE_ARN` | `arn:aws:iam::648548511587:role/ecsTaskExecutionRole` | ECS task IAM role | ✅ Set |
+
+**Note:** `DB_SECRET_ARN` is NOT required — the Secrets Manager ARN is hardcoded in `cd.yml` to avoid formatting issues that caused routing to SSM instead of Secrets Manager.
 
 ### Cost note
 
@@ -68,9 +87,69 @@ aws rds delete-db-instance --db-instance-identifier investment-tracker-db --skip
 
 ### Known issues / lessons learned (2026-06-06)
 
-- **ECS `valueFrom` routing**: a plain secret name (no `arn:` prefix) routes to **SSM Parameter Store**, not Secrets Manager. Always use the full `arn:aws:secretsmanager:...` ARN. Now hardcoded in `cd.yml`.
-- **ECS task public IP changes** on every redeployment. Update `frontend/config.js` and re-sync S3 after each CD run. Add an ALB for a stable DNS endpoint in production.
-- **jq `$ENV` is a reserved built-in** — never use `--arg ENV` in jq filters; it injects the entire process environment. Use `$DOTNET_ENV`, `$CORS_ORIGIN`, etc.
+**ECS `valueFrom` routing** (CRITICAL)
+- A plain secret name (no `arn:` prefix) routes to **SSM Parameter Store**, not Secrets Manager
+- ECS interprets `arn:aws:secretsmanager:...` → Secrets Manager; anything else → SSM
+- Fix: Use full ARN — now hardcoded in `cd.yml` as `arn:aws:secretsmanager:us-east-1:648548511587:secret:investment-tracker/db-connection-KMHXlO`
+
+**jq `$ENV` reserved built-in** (CRITICAL)
+- `$ENV` is a jq global containing the entire process environment as JSON
+- `--arg ENV "value"` does NOT reliably override it on all jq versions
+- Fix: Never use `ENV` as a jq variable name. Use `$DOTNET_ENV`, `$CORS_ORIGIN`, `$ROLE_ARN`, `$SECRET_ARN` instead
+
+**ECS task public IP is ephemeral**
+- IP changes on every task replacement (redeployment)
+- After each CD run, update `frontend/config.js` with the new IP and re-sync S3
+- For production: add an ALB (Application Load Balancer) for a stable DNS endpoint
+
+**CD wait loop improvements** (2026-06-06)
+- Replaced `aws ecs wait services-stable` with custom polling loop
+- Reason: built-in waiter has 10-minute hard timeout with no visibility into why tasks fail
+- Fix: custom loop polls every 20 seconds, shows progress, has 15-min timeout
+- Added `Diagnose deployment failure` step that runs on any failure and prints stopped task reason + CloudWatch logs
+
+**S3 frontend requires manual sync after config changes**
+- S3 static hosting works, but no CI/CD integration yet
+- After updating `frontend/config.js` with new ECS IP, must manually run: `aws s3 sync frontend/ s3://investment-tracker-frontend-648548511587/`
+- Future: add S3 sync step to CD workflow
+
+**RDS is in private subnet (no direct local access)**
+- Windows machine cannot reach RDS directly (security group restricts inbound to ECS SG only)
+- DB migration must run from ECS container startup (auto-migrates with `db.Database.MigrateAsync()`)
+- To manually run migrations from local: temporarily open RDS security group OR use SSM Session Manager to exec into ECS task
+
+**DB auto-migration approach**
+- `Program.cs` calls `db.Database.MigrateAsync()` before `app.Run()`
+- EF Core checks `__EFMigrationsHistory` table and skips if migration already applied
+- Safe for every restart; no risk of duplicate table creation
+- Requires migrations to be compiled into the assembly (not separately managed) — currently `InitialCreate` is compiled in
+
+---
+
+## Next Steps for Tomorrow (2026-06-07)
+
+### Immediate (5 minutes)
+1. **Trigger CI manually:** https://github.com/rbarak/RonenTry/actions/workflows/ci.yml → "Run workflow" → select `main` → "Run"
+2. **Watch CD auto-deploy** (~5 minutes): CI will trigger CD automatically
+   - CD will create new ECS task with updated code
+   - `db.Database.MigrateAsync()` runs on task startup
+   - New task public IP will be different — check the CD log output
+
+### Short-term (15 minutes)
+3. **Test the registration form:**
+   - Open: `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com`
+   - Fill in Hebrew form with valid data
+   - Expected response: success banner with `officeId ≥ 111`
+   - Check CloudWatch logs if there's an error: https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/%2Fecs%2Finvestment-tracker
+
+### Known gotchas to watch for
+- If form shows "Server connection error" (`שגיאת חיבור לשרת`): DB migration may not have run yet (check ECS task startup logs)
+- If deployment times out: check "Diagnose deployment failure" section in CD log for the actual error
+- If ECS IP changed: you may need to update `frontend/config.js` and re-sync S3 (see ECS Service → Task page for new IP)
+
+### After testing works
+- Delete RDS (costs ~$1.10/day): `aws rds delete-db-instance --db-instance-identifier investment-tracker-db --skip-final-snapshot --region us-east-1`
+- Or keep running for continued testing
 
 ---
 

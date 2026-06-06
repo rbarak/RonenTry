@@ -87,7 +87,16 @@ Two endpoints:
 | `.github/workflows/cd.yml` | Auto when CI succeeds | Update ECS task def → deploy → 15-min wait loop → health check → print URL |
 | `.github/workflows/deploy.yml` | Disabled | Legacy — replaced by ci.yml + cd.yml |
 
-**CD jq critical rule:** ECS `valueFrom` for secrets must use the full `arn:aws:secretsmanager:...` ARN. A plain secret name (no `arn:` prefix) routes to SSM Parameter Store instead of Secrets Manager. The ARN is hardcoded in `cd.yml` to avoid formatting issues.
+**CD pipeline key fixes (2026-06-06):**
+- ECS `valueFrom` must use full `arn:aws:secretsmanager:...` ARN (plain name routes to SSM). Hardcoded in `cd.yml`.
+- jq `$ENV` is a reserved built-in; renamed to `$DOTNET_ENV`, `$CORS_ORIGIN`, `$ROLE_ARN` to avoid collision.
+- Replaced `aws ecs wait services-stable` with custom 15-min polling loop (live progress output).
+- Added "Diagnose deployment failure" step (runs on failure, shows stopped task reason + CloudWatch logs).
+
+**Auto-migration on startup:**
+- `Program.cs` now calls `db.Database.MigrateAsync()` before `app.Run()`.
+- Creates `Offices` table, `OfficeIdSequence`, indexes, and `__EFMigrationsHistory` on first ECS task startup.
+- Completely idempotent — safe to run on every restart; checks `__EFMigrationsHistory` and skips if already applied.
 
 ## AWS Environment (us-east-1, account 648548511587)
 
@@ -106,6 +115,13 @@ All infrastructure provisioned 2026-06-05. AWS CLI path on this machine: `C:\Pro
 | Secrets Manager ARN | `arn:aws:secretsmanager:us-east-1:648548511587:secret:investment-tracker/db-connection-KMHXlO` |
 | S3 frontend | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` |
 
-**Current state (2026-06-06):** Code committed, CI ✅ passing (32 tests), Docker image in ECR ✅. CD pipeline being debugged — latest fix restores full Secrets Manager ARN in task definition. ECS task not yet running. DB migration not yet run. `frontend/config.js` still has `localhost` placeholder.
+**Current state (2026-06-06, end of day):** 
+- Code committed (latest: 22538c1 — auto-migration + config.js)
+- CI ✅ passing (32 tests, Docker image in ECR with SHA + `latest`)
+- CD ✅ deployed (ECS task running at `34.227.223.172:8080`)
+- Health check ✅ (`GET /health` returns 200)
+- Frontend ✅ synced to S3 with live ECS IP
+- DB auto-migration ready (runs on next ECS startup)
+- Form ready for testing (needs next CI trigger to deploy migration + test)
 
 **GitHub Secrets required (9):** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `ECR_REPOSITORY`, `ECS_CLUSTER`, `ECS_SERVICE`, `ASPNETCORE_ENVIRONMENT`, `CORS_ALLOWED_ORIGIN`, `ECS_TASK_EXECUTION_ROLE_ARN`. Full values in `infrastructure/aws-deploy.md`.

@@ -101,17 +101,21 @@ Two separate workflows in `.github/workflows/`:
 
 See [infrastructure/aws-deploy.md](infrastructure/aws-deploy.md) for step-by-step setup guide and full resource reference.
 
-### Deployment Status (as of 2026-06-06)
+### Deployment Status (as of 2026-06-06, end of day)
 
-| Layer | Status | Notes |
-|-------|--------|-------|
-| AWS infrastructure | ✅ Provisioned | All resources in `us-east-1` — see `aws-deploy.md` |
-| S3 frontend bucket | ✅ Created | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` |
-| Code committed & pushed | ✅ Done | All commits on `main` branch |
-| GitHub Secrets | ✅ Configured | 9 secrets set (see `aws-deploy.md` for full list) |
-| Docker image in ECR | ✅ Pushed | CI pipeline succeeded; image tagged with SHA + `latest` |
-| ECS task running | ⚠️ Pending | CD pipeline being debugged — trigger CI to verify latest fix |
-| DB migration | ❌ Pending | Run once ECS task is healthy |
-| `frontend/config.js` updated | ❌ Pending | Update with ECS task public IP after first successful CD run |
+| Layer | Status | Details |
+|-------|--------|---------|
+| AWS infrastructure | ✅ Provisioned | All resources in `us-east-1` (see `aws-deploy.md` for full list & console links) |
+| S3 frontend bucket | ✅ Created & synced | `http://investment-tracker-frontend-648548511587.s3-website-us-east-1.amazonaws.com` |
+| Code committed & pushed | ✅ Done | All changes on `main`; latest commit (22538c1) includes auto-migration + config.js |
+| GitHub Secrets | ✅ Configured | All 9 secrets set |
+| Docker image in ECR | ✅ Built | CI passed; image in ECR with SHA + `latest` tags |
+| ECS task running | ✅ Live | Running at `34.227.223.172:8080` (health check: `/health`) |
+| DB auto-migration | ⚠️ Pending | Ready in code; runs on next ECS startup (needs CI trigger to deploy) |
+| Frontend form | ⚠️ Testing | Config.js updated with ECS IP; S3 synced; ready after next deployment |
 
-**Next action:** Trigger CI manually → watch CD → get ECS IP → update config.js → run migration.
+**Next action:** 
+1. Trigger CI manually (GitHub Actions → ci.yml → Run workflow)
+2. Watch CD deploy (auto-runs after CI succeeds)
+3. Open S3 URL and test the Hebrew registration form
+4. Expected: success banner with `officeId ≥ 111`
