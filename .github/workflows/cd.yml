@@ -217,24 +217,30 @@ jobs:
 
       - name: Verify DB migration in CloudWatch logs
         run: |
-          sleep 5
-          LOG_STREAM=$(aws logs describe-log-streams \
-            --log-group-name /ecs/investment-tracker \
-            --order-by LastEventTime --descending \
-            --max-items 1 \
-            --query 'logStreams[0].logStreamName' --output text --region $AWS_REGION 2>/dev/null)
+          # Derive the log stream name directly from the running task ID — avoids timing races
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster $ECS_CLUSTER --service-name $ECS_SERVICE \
+            --desired-status RUNNING \
+            --query 'taskArns[0]' --output text --region $AWS_REGION)
+          TASK_ID="${TASK_ARN##*/}"
+          LOG_STREAM="api/api/$TASK_ID"
+          echo "Checking log stream: $LOG_STREAM"
 
-          if [ -z "$LOG_STREAM" ] || [ "$LOG_STREAM" = "None" ]; then
-            echo "⚠️  No CloudWatch log streams found — migration status unknown"
-          else
-            echo "Log stream: $LOG_STREAM"
+          # Retry up to 30s for the stream to receive events
+          for i in 1 2 3 4 5 6; do
             MIGRATION_LINES=$(aws logs get-log-events \
               --log-group-name /ecs/investment-tracker \
               --log-stream-name "$LOG_STREAM" \
-              --query 'events[*].message' --output text --region $AWS_REGION | \
-              grep -i "migration" || echo "No migration log lines found")
-            echo "$MIGRATION_LINES"
-          fi
+              --query 'events[*].message' --output text --region $AWS_REGION 2>/dev/null | \
+              grep -i "migration" || true)
+            if [ -n "$MIGRATION_LINES" ]; then
+              echo "$MIGRATION_LINES"
+              break
+            fi
+            echo "Attempt $i: no migration lines yet — waiting 5s..."
+            sleep 5
+          done
+          [ -z "$MIGRATION_LINES" ] && echo "⚠️  Migration log lines not found after retries"
 
       - name: Update frontend config.js with new ECS IP
         run: |
